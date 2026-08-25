@@ -464,9 +464,7 @@ class Z80(Snapshot):
     def __init__(self, z80_data=None, ram=(0,) * 49152, machine='48K'):
         super().__init__()
         self.type = 'Z80'
-        if z80_data:
-            self._read(z80_data)
-        else:
+        if z80_data is None:
             self.header = [0] * 86
             self.header[30] = 54 # Version 3
             if len(ram) == 8:
@@ -475,10 +473,15 @@ class Z80(Snapshot):
                 if machine == '+2':
                     self.header[37] |= 0x80 # +2
             self.set_ram(ram)
+        else:
+            self._read(z80_data)
 
     def _read(self, z80_data):
         banks = {}
         data = list(z80_data)
+        data_len = len(data)
+        if data_len < 30:
+            raise SnapshotError('Invalid Z80 file')
         if sum(data[6:8]) > 0:
             # Version 1
             page = 0
@@ -495,8 +498,15 @@ class Z80(Snapshot):
             banks[0] = ram[0x8000:0xC000]
             self.machine = '48K'
         else:
+            if data_len < 32:
+                raise SnapshotError('Invalid Z80 file')
+            add_hdr_len = get_word(data, 30)
+            if add_hdr_len not in (23, 54, 55):
+                raise SnapshotError(f'Invalid additional header length {add_hdr_len} (expected 23, 54 or 55)')
             page = None
-            i = 32 + data[30]
+            i = 32 + add_hdr_len
+            if data_len < i:
+                raise SnapshotError(f'Header is {data_len} bytes (expected {i})')
             self.header = data[:i]
             self.pc = get_word(self.header, 32)
             self.out7ffd = self.header[35]

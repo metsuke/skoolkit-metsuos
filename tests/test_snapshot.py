@@ -311,6 +311,45 @@ class Z80Test(SnapshotTest):
         with self.assertRaisesRegex(SnapshotError, 'Found ED ED 00 0B'):
             get_snapshot(z80_file)
 
+    def test_z80_empty(self):
+        z80 = ()
+        with self.assertRaises(SnapshotError) as cm:
+            Snapshot.get(z80, 'z80')
+        self.assertEqual(cm.exception.args[0], 'Invalid Z80 file')
+
+    def test_z80_header_too_short(self):
+        z80 = [0] * 29
+        with self.assertRaises(SnapshotError) as cm:
+            Snapshot.get(z80, 'z80')
+        self.assertEqual(cm.exception.args[0], 'Invalid Z80 file')
+
+    def test_z80_v2_header_too_short(self):
+        z80 = [0] * 31
+        with self.assertRaises(SnapshotError) as cm:
+            Snapshot.get(z80, 'z80')
+        self.assertEqual(cm.exception.args[0], 'Invalid Z80 file')
+
+    def test_z80_invalid_additional_header_length(self):
+        z80 = [0] * 32
+        z80[30] = 1
+        with self.assertRaises(SnapshotError) as cm:
+            Snapshot.get(z80, 'z80')
+        self.assertEqual(cm.exception.args[0], 'Invalid additional header length 1 (expected 23, 54 or 55)')
+
+    def test_z80_v2_additional_header_too_short(self):
+        z80 = [0] * 32
+        z80[30] = 23 # v2
+        with self.assertRaises(SnapshotError) as cm:
+            Snapshot.get(z80, 'z80')
+        self.assertEqual(cm.exception.args[0], 'Header is 32 bytes (expected 55)')
+
+    def test_z80_v3_additional_header_too_short(self):
+        z80 = [0] * 33
+        z80[30] = 54 # v3
+        with self.assertRaises(SnapshotError) as cm:
+            Snapshot.get(z80, 'z80')
+        self.assertEqual(cm.exception.args[0], 'Header is 33 bytes (expected 86)')
+
 class Z80CompressionTest(SkoolKitTestCase):
     def test_single_ED_followed_by_five_identical_values(self):
         data = [237, 1, 1, 1, 1, 1]
