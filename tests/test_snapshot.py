@@ -587,6 +587,50 @@ class SZXTest(SnapshotTest):
         pages = {p: [p] * 16384 for p in (1, 3, 4, 6, 7)}
         self._test_szx(exp_ram, False, machine_id=2, pages=pages, page=-1)
 
+    def test_szx_short_RAMP(self):
+        szx = self._get_szx_header(specregs=False)
+        szx.extend((
+            82, 65, 77, 80, # RAMP
+            2, 0, 0, 0,     # Length: 2
+            0, 0
+        ))
+        with self.assertRaises(SnapshotError) as cm:
+            Snapshot.get(szx, 'szx')
+        self.assertEqual(cm.exception.args[0], "RAMP block length (2) is too small")
+
+    def test_szx_short_Z80R(self):
+        szx = self._get_szx_header(specregs=False)
+        szx.extend((
+            90, 56, 48, 82, # Z80R
+            36, 0, 0, 0,    # Length: 36
+        ))
+        szx.extend([0] * 36)
+        with self.assertRaises(SnapshotError) as cm:
+            Snapshot.get(szx, 'szx')
+        self.assertEqual(cm.exception.args[0], "Z80R block length (36) is too small")
+
+    def test_szx_short_SPCR(self):
+        szx = self._get_szx_header(specregs=False)
+        szx.extend((
+            83, 80, 67, 82, # SPCR
+            3, 0, 0, 0,     # Length: 3
+            0, 0, 0
+        ))
+        with self.assertRaises(SnapshotError) as cm:
+            Snapshot.get(szx, 'szx')
+        self.assertEqual(cm.exception.args[0], "SPCR block length (3) is too small")
+
+    def test_szx_short_AY(self):
+        szx = self._get_szx_header(specregs=False)
+        szx.extend((
+            65, 89, 0, 0, # AY
+            17, 0, 0, 0,  # Length: 17
+        ))
+        szx.extend([0] * 17)
+        with self.assertRaises(SnapshotError) as cm:
+            Snapshot.get(szx, 'szx')
+        self.assertEqual(cm.exception.args[0], "AY block length (17) is too small")
+
 class WriteSnapshotTest(SkoolKitTestCase):
     def _normalise_registers(self, registers):
         r = {

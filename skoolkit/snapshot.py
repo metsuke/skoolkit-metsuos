@@ -284,6 +284,8 @@ class SZX(Snapshot):
                 block = data[i + 8:i + 8 + block_len]
                 self.tail.append((block_id_str, block))
                 if block_id == b'RAMP':
+                    if block_len < 3:
+                        raise SnapshotError(f'RAMP block length ({block_len}) is too small')
                     bank = data[i + 10] % 8
                     ram = data[i + 11:i + 8 + block_len]
                     if data[i + 8] % 2:
@@ -297,6 +299,8 @@ class SZX(Snapshot):
                 else:
                     self.blocks[block_id] = block
                     if block_id == b'Z80R':
+                        if block_len < 37:
+                            raise SnapshotError(f'Z80R block length ({block_len}) is too small')
                         self.f = block[0]
                         self.a = block[1]
                         self.bc = get_word(block, 2)
@@ -319,10 +323,14 @@ class SZX(Snapshot):
                         self.tstates = get_dword(block, 29)
                         self.memptr = get_word(block, 35)
                     elif block_id == b'SPCR':
+                        if block_len < 4:
+                            raise SnapshotError(f'SPCR block length ({block_len}) is too small')
                         self.border = block[0] % 8
                         self.out7ffd = block[1]
                         self.outfe = block[3]
                     elif block_id == b'AY\x00\x00':
+                        if block_len < 18:
+                            raise SnapshotError(f'AY block length ({block_len}) is too small')
                         self.outfffd = block[1]
                         self.ay = tuple(block[2:18])
             i += 8 + block_len
