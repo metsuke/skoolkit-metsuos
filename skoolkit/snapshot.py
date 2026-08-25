@@ -571,13 +571,14 @@ class Z80(Snapshot):
     def _decompress(self, ramz):
         block = []
         i = 0
-        while i < len(ramz):
+        ramz_len = len(ramz)
+        while i < ramz_len:
             b = ramz[i]
             i += 1
-            if b == 237 and i < len(ramz):
+            if b == 237 and i < ramz_len:
                 c = ramz[i]
                 i += 1
-                if c == 237:
+                if c == 237 and i + 1 < ramz_len:
                     length, byte = ramz[i], ramz[i + 1]
                     if length == 0:
                         raise SnapshotError("Found ED ED 00 {0:02X}".format(byte))

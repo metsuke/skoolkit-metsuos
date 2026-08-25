@@ -350,6 +350,44 @@ class Z80Test(SnapshotTest):
             Snapshot.get(z80, 'z80')
         self.assertEqual(cm.exception.args[0], 'Header is 33 bytes (expected 86)')
 
+    def test_z80_v2_short_compressed_block_ending_with_ED_ED(self):
+        z80 = [0] * 55
+        z80[30] = 23 # v2
+        z80.extend((
+            4, 0,            # Length of compressed data (4)
+            4,               # Page number
+            0, 1, 0xED, 0xED # Four bytes
+        ))
+        with self.assertRaises(SnapshotError) as cm:
+            Snapshot.get(z80, 'z80')
+        self.assertEqual(cm.exception.args[0], 'Page 1 is 4 bytes (should be 16384)')
+
+    def test_z80_v2_compressed_block_ending_with_ED_ED(self):
+        z80 = [0] * 55
+        z80[30] = 23 # v2
+        zeroes = [0xED, 0xED, 255, 0] * 64 # 16320 zeroes
+        z80.extend((
+            4, 1,              # Length of compressed data (260)
+            4,                 # Page number
+            *zeroes,           # 16320 zeroes
+            0xED, 0xED, 64, 0  # 64 more zeroes (totalling 16384)
+        ))
+        z80.extend((
+            4, 1,              # Length of compressed data (260)
+            5,                 # Page number
+            *zeroes,           # 16320 zeroes
+            0xED, 0xED, 64, 0  # 64 more zeroes (totalling 16384)
+        ))
+        z80.extend((
+            6, 1,              # Length of compressed data (262)
+            8,                 # Page number (8: 0x4000-0x7FFF)
+            *zeroes,           # 16320 zeroes
+            0xED, 0xED, 62, 0, # 62 more zeroes (totalling 16382)
+            0xED, 0xED         # Two 0xED bytes
+        ))
+        ram = Snapshot.get(z80, 'z80').ram()
+        self.assertEqual([0xED, 0xED], ram[0x3FFE:0x4000])
+
 class Z80CompressionTest(SkoolKitTestCase):
     def test_single_ED_followed_by_five_identical_values(self):
         data = [237, 1, 1, 1, 1, 1]

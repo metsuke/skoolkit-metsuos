@@ -28,7 +28,8 @@ Changelog
 * Fixed the parsing of a 48K SNA snapshot that has SP set to 0xFFFF
 * Fixed the parsing of an SZX snapshot with missing RAMP blocks or a RAMP,
   SPCR, Z80R or AY block that is too short
-* Fixed the parsing of a Z80 snapshot with an invalid header length
+* Fixed the parsing of a Z80 snapshot with an invalid header length or a
+  compressed RAM block that ends with two 0xED bytes
 
 10.1 (2026-08-14)
 -----------------
