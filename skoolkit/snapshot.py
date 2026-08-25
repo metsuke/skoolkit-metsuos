@@ -221,7 +221,7 @@ class SNA(Snapshot):
         self.im = self.header[25]
         banks = [None] * 8
         if len(self.tail) == 49152:
-            if self.sp >= 16384:
+            if 16384 <= self.sp < 65535:
                 self.pc = get_word(self.tail, self.sp - 16384)
             page = 0
             self.machine = '48K'

@@ -120,6 +120,13 @@ class SNATest(SnapshotTest):
         self.assertEqual(len(ram), 49152)
         self.assertEqual(ram, exp_ram)
 
+    def test_sna_48k_with_sp_at_0xffff(self):
+        sna = [0] * 49179
+        sna[23:25] = (0xFF, 0xFF) # SP=0xFFFF
+        tmp_sna = self.write_bin_file(sna, suffix='.sna')
+        snapshot = Snapshot.get(tmp_sna)
+        self.assertEqual(snapshot.pc, 0)
+
     def test_sna_128k(self):
         header = [0] * 27
         exp_ram = [(n + 37) & 255 for n in range(49152)]
