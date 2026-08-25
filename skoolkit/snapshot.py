@@ -243,9 +243,7 @@ class SZX(Snapshot):
     def __init__(self, szx_data=None, ram=None, machine='48K'):
         super().__init__()
         self.type = 'SZX'
-        if szx_data:
-            self._read(szx_data)
-        else:
+        if szx_data is None:
             self.header = bytearray(b'ZXST\x01\x04\x01\x00')
             self.blocks = {}
             if len(ram) == 8:
@@ -259,6 +257,8 @@ class SZX(Snapshot):
                 # 48K
                 self.blocks[b'KEYB'] = bytearray([0] * 5)
             self.set_ram(ram)
+        else:
+            self._read(szx_data)
 
     def _read(self, szx_data):
         self.tail = []
@@ -336,6 +336,13 @@ class SZX(Snapshot):
             i += 8 + block_len
         if self.header[6] > 1 and b'SPCR' not in self.blocks:
             raise SnapshotError("SPECREGS (SPCR) block not found")
+        exp_banks = {
+            0: {5},      # 16K
+            1: {5, 2, 0} # 48K
+        }
+        missing = sorted(str(b) for b in exp_banks.get(machine_id, set(range(8))) - set(banks))
+        if missing:
+            raise SnapshotError('RAMP block(s) missing for RAM bank(s) {}'.format(', '.join(missing)))
         self.memory = Memory(banks=banks, page=self.out7ffd % 8)
 
     def _add_zxstspecregs(self, state):

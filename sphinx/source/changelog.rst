@@ -26,8 +26,8 @@ Changelog
 * Fixed how two base prefixes are handled when applied to an instruction with
   one operand
 * Fixed the parsing of a 48K SNA snapshot that has SP set to 0xFFFF
-* Fixed the parsing of an SZX snapshot with a RAMP, SPCR, Z80R or AY block that
-  is too short
+* Fixed the parsing of an SZX snapshot with missing RAMP blocks or a RAMP,
+  SPCR, Z80R or AY block that is too short
 
 10.1 (2026-08-14)
 -----------------

@@ -556,15 +556,6 @@ class SZXTest(SnapshotTest):
         except SnapshotError as e:
             self.assertEqual(e.args[0], "Page {0} is {1} bytes (should be 16384)".format(5, len(ram)))
 
-    def test_szx_48k_missing_page(self):
-        szx = self._get_szx_header()
-        szx.extend(self._get_zxstrampage(5, True, [0] * 16384))
-        tmp_szx = self.write_bin_file(szx, suffix='.szx')
-        try:
-            get_snapshot(tmp_szx)
-        except SnapshotError as e:
-            self.assertEqual(e.args[0], "Page 2 not found")
-
     def test_szx_128k(self):
         exp_ram = [(n + 73) & 255 for n in range(49152)]
         self._test_szx(exp_ram, True, 3)
@@ -630,6 +621,72 @@ class SZXTest(SnapshotTest):
         with self.assertRaises(SnapshotError) as cm:
             Snapshot.get(szx, 'szx')
         self.assertEqual(cm.exception.args[0], "AY block length (17) is too small")
+
+    def test_szx_empty(self):
+        szx = ()
+        with self.assertRaises(SnapshotError) as cm:
+            Snapshot.get(szx, 'szx')
+        self.assertEqual(cm.exception.args[0], "Invalid SZX file")
+
+    def test_szx_16k_without_ram_bank_5(self):
+        szx = self._get_szx_header(machine_id=0, specregs=False)
+        szx.extend(self._get_zxstrampage(2, False, [0] * 0x4000))
+        with self.assertRaises(SnapshotError) as cm:
+            Snapshot.get(szx, 'szx')
+        self.assertEqual(cm.exception.args[0], "RAMP block(s) missing for RAM bank(s) 5")
+
+    def test_szx_48k_without_ram_banks_0_and_2(self):
+        szx = self._get_szx_header(specregs=False)
+        bank = [0] * 0x4000
+        szx.extend(self._get_zxstrampage(5, False, bank))
+        with self.assertRaises(SnapshotError) as cm:
+            Snapshot.get(szx, 'szx')
+        self.assertEqual(cm.exception.args[0], "RAMP block(s) missing for RAM bank(s) 0, 2")
+
+    def test_szx_48k_without_ram_bank_0(self):
+        szx = self._get_szx_header(specregs=False)
+        bank = [0] * 0x4000
+        szx.extend(self._get_zxstrampage(5, False, bank))
+        szx.extend(self._get_zxstrampage(2, False, bank))
+        with self.assertRaises(SnapshotError) as cm:
+            Snapshot.get(szx, 'szx')
+        self.assertEqual(cm.exception.args[0], "RAMP block(s) missing for RAM bank(s) 0")
+
+    def test_szx_48k_without_ram_bank_2(self):
+        szx = self._get_szx_header(specregs=False)
+        bank = [0] * 0x4000
+        szx.extend(self._get_zxstrampage(5, False, bank))
+        szx.extend(self._get_zxstrampage(0, False, bank))
+        with self.assertRaises(SnapshotError) as cm:
+            Snapshot.get(szx, 'szx')
+        self.assertEqual(cm.exception.args[0], "RAMP block(s) missing for RAM bank(s) 2")
+
+    def test_szx_48k_without_ram_bank_5(self):
+        szx = self._get_szx_header(specregs=False)
+        bank = [0] * 0x4000
+        szx.extend(self._get_zxstrampage(0, False, bank))
+        szx.extend(self._get_zxstrampage(2, False, bank))
+        with self.assertRaises(SnapshotError) as cm:
+            Snapshot.get(szx, 'szx')
+        self.assertEqual(cm.exception.args[0], "RAMP block(s) missing for RAM bank(s) 5")
+
+    def test_szx_128k_without_ram_banks_0_and_2_and_6(self):
+        szx = self._get_szx_header(machine_id=2)
+        bank = [0] * 0x4000
+        for page in (1, 3, 4, 5, 7):
+            szx.extend(self._get_zxstrampage(page, False, bank))
+        with self.assertRaises(SnapshotError) as cm:
+            Snapshot.get(szx, 'szx')
+        self.assertEqual(cm.exception.args[0], "RAMP block(s) missing for RAM bank(s) 0, 2, 6")
+
+    def test_szx_128k_without_ram_bank_7(self):
+        szx = self._get_szx_header(machine_id=2)
+        bank = [0] * 0x4000
+        for page in range(7):
+            szx.extend(self._get_zxstrampage(page, False, bank))
+        with self.assertRaises(SnapshotError) as cm:
+            Snapshot.get(szx, 'szx')
+        self.assertEqual(cm.exception.args[0], "RAMP block(s) missing for RAM bank(s) 7")
 
 class WriteSnapshotTest(SkoolKitTestCase):
     def _normalise_registers(self, registers):
