@@ -30,7 +30,7 @@ Changelog
   SPCR, Z80R or AY block that is too short
 * Fixed the parsing of a Z80 snapshot with an invalid header length, missing
   RAM pages, or a compressed RAM block that ends with two 0xED bytes
-* Fixed the parsing of a PZX file with blocks that are missing data
+* Fixed the parsing of PZX and TZX files with blocks that are missing data
 
 10.1 (2026-08-14)
 -----------------

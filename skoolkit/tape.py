@@ -17,6 +17,38 @@
 from skoolkit import SkoolKitError, as_dword, get_word, get_word3, get_dword, read_bin_file
 from skoolkit.basic import get_char
 
+TZX_MIN_BLOCK_LENGTHS = {
+    0x10: 4,
+    0x11: 18,
+    0x12: 4,
+    0x13: 1,
+    0x14: 10,
+    0x15: 8,
+    0x16: 4,
+    0x17: 4,
+    0x18: 14,
+    0x19: 18,
+    0x20: 2,
+    0x21: 1,
+    0x22: 0,
+    0x23: 2,
+    0x24: 2,
+    0x25: 0,
+    0x26: 2,
+    0x27: 0,
+    0x28: 3,
+    0x2A: 4,
+    0x2B: 5,
+    0x30: 1,
+    0x31: 2,
+    0x32: 3,
+    0x33: 1,
+    0x34: 8,
+    0x35: 20,
+    0x40: 4,
+    0x5A: 9
+}
+
 ARCHIVE_INFO = {
     0: "Full title",
     1: "Software house/publisher",
@@ -556,6 +588,9 @@ def _get_pzx_block(data, i, block_num, prev_rom_pilot):
     block = TapeBlock(block_num, tape_data, timings, block_id, name, info, standard, block_data)
     return i + 8 + block_len, block, rom_pilot
 
+def _tzx_error(block_num, block_id, msg):
+    return SkoolKitError(f'Block {block_num} (0x{block_id:02X}) {msg}')
+
 def _get_tzx_block(data, i, block_num, get_info, get_timings):
     # https://worldofspectrum.net/features/TZXformat.html
     block_id = data[i]
@@ -565,6 +600,8 @@ def _get_tzx_block(data, i, block_num, get_info, get_timings):
     timings = None
     standard = False
     i += 1
+    if i + TZX_MIN_BLOCK_LENGTHS.get(block_id, 0) > len(data):
+        raise _tzx_error(block_num, block_id, 'is too short')
     if block_id == 0x10:
         # Standard speed data block
         header = 'Standard speed data'
@@ -623,6 +660,9 @@ def _get_tzx_block(data, i, block_num, get_info, get_timings):
         header = 'Pulse sequence'
         num_pulses = data[i]
         i += 1
+        missing = i + 2 * num_pulses - len(data)
+        if missing > 0:
+            raise _tzx_error(block_num, block_id, f'missing {missing} byte(s)')
         pulses = []
         for pulse in range(num_pulses):
             pulse_len = get_word(data, i)
@@ -659,6 +699,10 @@ def _get_tzx_block(data, i, block_num, get_info, get_timings):
         pause = get_word(data, i + 2)
         used_bits = data[i + 4]
         num_bytes = get_word3(data, i + 5)
+        m = i + 8 + num_bytes
+        missing = m - len(data)
+        if missing > 0:
+            raise _tzx_error(block_num, block_id, f'missing {missing} byte(s)')
         if get_info:
             info.extend((
                 f'T-states per sample: {tps}',
@@ -690,7 +734,7 @@ def _get_tzx_block(data, i, block_num, get_info, get_timings):
             pulses.append((1, bit_count * tps))
             tape_data = []
             timings = TapeBlockTimings(pulses, pause=pause * 3500, data=True)
-        i += 8 + num_bytes
+        i = m
     elif block_id == 0x16:
         # C64 ROM type data
         header = 'C64 ROM type data'
@@ -774,13 +818,16 @@ def _get_tzx_block(data, i, block_num, get_info, get_timings):
         # Select block
         header = 'Select block'
         if get_info:
-            index = i + 3
-            for j in range(data[i + 2]):
-                offset = get_word(data, index)
-                length = data[index + 2]
-                prefix = 'Option {} (block {})'.format(j + 1, block_num + offset)
-                info.extend(_format_text(prefix, data, index + 3, length))
-                index += length + 3
+            try:
+                index = i + 3
+                for j in range(data[i + 2]):
+                    offset = get_word(data, index)
+                    length = data[index + 2]
+                    prefix = 'Option {} (block {})'.format(j + 1, block_num + offset)
+                    info.extend(_format_text(prefix, data, index + 3, length))
+                    index += length + 3
+            except IndexError:
+                raise SkoolKitError('Unexpected end of file')
         i += get_word(data, i) + 2
     elif block_id == 0x2A:
         # Stop the tape if in 48K mode
@@ -812,29 +859,32 @@ def _get_tzx_block(data, i, block_num, get_info, get_timings):
         # Archive info
         header = 'Archive info'
         if get_info:
-            num_strings = data[i + 2]
-            j = i + 3
-            for k in range(num_strings):
-                try:
+            try:
+                num_strings = data[i + 2]
+                j = i + 3
+                for k in range(num_strings):
                     str_len = data[j + 1]
-                except IndexError:
-                    raise SkoolKitError('Unexpected end of file')
-                info.extend(_format_text(ARCHIVE_INFO.get(data[j], str(data[j])), data, j + 2, str_len))
-                j += 2 + str_len
+                    info.extend(_format_text(ARCHIVE_INFO.get(data[j], str(data[j])), data, j + 2, str_len))
+                    j += 2 + str_len
+            except IndexError:
+                raise SkoolKitError('Unexpected end of file')
         i += get_word(data, i) + 2
     elif block_id == 0x33:
         # Hardware type
         header = 'Hardware type'
         if get_info:
             i += 1
-            for j in range(data[i - 1]):
-                hw_type, hw_ids = HARDWARE_TYPE.get(data[i], ('Unknown', {}))
-                info.extend((
-                    '- Type: {}'.format(hw_type),
-                    '  Name: {}'.format(hw_ids.get(data[i + 1], 'Unknown')),
-                    '  Info: {}'.format(HARDWARE_INFO[data[i] > 0].get(data[i + 2], 'Unknown'))
-                ))
-                i += 3
+            try:
+                for j in range(data[i - 1]):
+                    hw_type, hw_ids = HARDWARE_TYPE.get(data[i], ('Unknown', {}))
+                    info.extend((
+                        '- Type: {}'.format(hw_type),
+                        '  Name: {}'.format(hw_ids.get(data[i + 1], 'Unknown')),
+                        '  Info: {}'.format(HARDWARE_INFO[data[i] > 0].get(data[i + 2], 'Unknown'))
+                    ))
+                    i += 3
+            except IndexError:
+                raise SkoolKitError('Unexpected end of file')
         else:
             i += data[i] * 3 + 1
     elif block_id == 0x34:
@@ -859,6 +909,8 @@ def _get_tzx_block(data, i, block_num, get_info, get_timings):
         i += 9
     else:
         raise SkoolKitError(f'Unknown TZX block ID: 0x{block_id:02X}')
+    if i > len(data):
+        raise _tzx_error(block_num, block_id, f'missing {i - len(data)} byte(s)')
     return i, TapeBlock(block_num, tape_data, timings, block_id, header, info, standard, block_data)
 
 def hex_dump(data, row_size=16):
