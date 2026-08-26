@@ -210,6 +210,10 @@ class Z80Test(SnapshotTest):
         ram = snapshot[16384:] if len(snapshot) == 65536 else snapshot
         self._check_ram(ram, exp_ram, model, out7ffd, pages, page)
 
+    def _make_z80_ram_page(self, page, data):
+        data_len = len(data)
+        return (data_len % 256, data_len // 256, page, *data)
+
     def test_z80v1(self):
         exp_ram = [n & 255 for n in range(49152)]
         self._test_z80(exp_ram, 1, False)
@@ -353,11 +357,7 @@ class Z80Test(SnapshotTest):
     def test_z80_v2_short_compressed_block_ending_with_ED_ED(self):
         z80 = [0] * 55
         z80[30] = 23 # v2
-        z80.extend((
-            4, 0,            # Length of compressed data (4)
-            4,               # Page number
-            0, 1, 0xED, 0xED # Four bytes
-        ))
+        z80.extend(self._make_z80_ram_page(4, (0, 1, 0xED, 0xED)))
         with self.assertRaises(SnapshotError) as cm:
             Snapshot.get(z80, 'z80')
         self.assertEqual(cm.exception.args[0], 'Page 1 is 4 bytes (should be 16384)')
@@ -366,27 +366,80 @@ class Z80Test(SnapshotTest):
         z80 = [0] * 55
         z80[30] = 23 # v2
         zeroes = [0xED, 0xED, 255, 0] * 64 # 16320 zeroes
-        z80.extend((
-            4, 1,              # Length of compressed data (260)
-            4,                 # Page number
-            *zeroes,           # 16320 zeroes
-            0xED, 0xED, 64, 0  # 64 more zeroes (totalling 16384)
-        ))
-        z80.extend((
-            4, 1,              # Length of compressed data (260)
-            5,                 # Page number
-            *zeroes,           # 16320 zeroes
-            0xED, 0xED, 64, 0  # 64 more zeroes (totalling 16384)
-        ))
-        z80.extend((
-            6, 1,              # Length of compressed data (262)
-            8,                 # Page number (8: 0x4000-0x7FFF)
-            *zeroes,           # 16320 zeroes
-            0xED, 0xED, 62, 0, # 62 more zeroes (totalling 16382)
-            0xED, 0xED         # Two 0xED bytes
-        ))
+        emptyz = zeroes + [0xED, 0xED, 64, 0] # 16384 zeroes
+        eded = zeroes + [0xED, 0xED, 62, 0, 0xED, 0xED] # 16382 zeroes + EDED
+        z80.extend(self._make_z80_ram_page(4, emptyz))
+        z80.extend(self._make_z80_ram_page(5, emptyz))
+        z80.extend(self._make_z80_ram_page(8, eded))
         ram = Snapshot.get(z80, 'z80').ram()
         self.assertEqual([0xED, 0xED], ram[0x3FFE:0x4000])
+
+    def test_z80_48k_without_ram_banks_1_and_2(self):
+        z80 = [0] * 55
+        z80[30] = 23 # v2
+        emptyz = [0xED, 0xED, 255, 0] * 64 + [0xED, 0xED, 64, 0]
+        z80.extend(self._make_z80_ram_page(8, emptyz))
+        with self.assertRaises(SnapshotError) as cm:
+            Snapshot.get(z80, 'z80')
+        self.assertEqual(cm.exception.args[0], "Missing RAM bank(s) 1, 2")
+
+    def test_z80_48k_without_ram_bank_1(self):
+        z80 = [0] * 55
+        z80[30] = 23 # v2
+        emptyz = [0xED, 0xED, 255, 0] * 64 + [0xED, 0xED, 64, 0]
+        for page in (8, 5):
+            z80.extend(self._make_z80_ram_page(page, emptyz))
+        with self.assertRaises(SnapshotError) as cm:
+            Snapshot.get(z80, 'z80')
+        self.assertEqual(cm.exception.args[0], "Missing RAM bank(s) 1")
+
+    def test_z80_48k_without_ram_bank_2(self):
+        z80 = [0] * 55
+        z80[30] = 23 # v2
+        emptyz = [0xED, 0xED, 255, 0] * 64 + [0xED, 0xED, 64, 0]
+        for page in (8, 4):
+            z80.extend(self._make_z80_ram_page(page, emptyz))
+        with self.assertRaises(SnapshotError) as cm:
+            Snapshot.get(z80, 'z80')
+        self.assertEqual(cm.exception.args[0], "Missing RAM bank(s) 2")
+
+    def test_z80_48k_without_ram_bank_5(self):
+        z80 = [0] * 55
+        z80[30] = 23 # v2
+        emptyz = [0xED, 0xED, 255, 0] * 64 + [0xED, 0xED, 64, 0]
+        for page in (4, 5):
+            z80.extend(self._make_z80_ram_page(page, emptyz))
+        with self.assertRaises(SnapshotError) as cm:
+            Snapshot.get(z80, 'z80')
+        self.assertEqual(cm.exception.args[0], "Missing RAM bank(s) 5")
+
+    def test_z80_128k_without_ram_banks_0_and_2_and_6(self):
+        z80 = [0] * 55
+        z80[30] = 23 # v2
+        z80[34] = 3 # 128K
+        emptyz = [0xED, 0xED, 255, 0] * 64 + [0xED, 0xED, 64, 0]
+        for bank in (1, 3, 4, 5, 7):
+            z80.extend(self._make_z80_ram_page(bank + 3, emptyz))
+        with self.assertRaises(SnapshotError) as cm:
+            Snapshot.get(z80, 'z80')
+        self.assertEqual(cm.exception.args[0], "Missing RAM bank(s) 0, 2, 6")
+
+    def test_z80_128k_without_ram_bank_7(self):
+        z80 = [0] * 55
+        z80[30] = 23 # v2
+        z80[34] = 3 # 128K
+        emptyz = [0xED, 0xED, 255, 0] * 64 + [0xED, 0xED, 64, 0]
+        for bank in range(7):
+            z80.extend(self._make_z80_ram_page(bank + 3, emptyz))
+        with self.assertRaises(SnapshotError) as cm:
+            Snapshot.get(z80, 'z80')
+        self.assertEqual(cm.exception.args[0], "Missing RAM bank(s) 7")
+
+    def test_z80_with_extraneous_data(self):
+        z80 = self.write_z80([0] * 49152, ret_data=True)
+        z80.extend((0xFF, 0xFF)) # Extraneous data
+        ram = Snapshot.get(z80, 'z80').ram()
+        self.assertTrue(all(b == 0 for b in ram))
 
 class Z80CompressionTest(SkoolKitTestCase):
     def test_single_ED_followed_by_five_identical_values(self):

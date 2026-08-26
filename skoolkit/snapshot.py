@@ -478,13 +478,14 @@ class Z80(Snapshot):
 
     def _read(self, z80_data):
         banks = {}
+        exp_banks = {5, 1, 2}
+        page = None
         data = list(z80_data)
         data_len = len(data)
         if data_len < 30:
             raise SnapshotError('Invalid Z80 file')
         if sum(data[6:8]) > 0:
             # Version 1
-            page = 0
             self.header = data[:30]
             self.pc = get_word(self.header, 6)
             if data[12] & 32:
@@ -494,8 +495,8 @@ class Z80(Snapshot):
             if len(ram) != 49152:
                 raise SnapshotError(f'RAM is {len(ram)} bytes (should be 49152)')
             banks[5] = ram[0x0000:0x4000]
-            banks[2] = ram[0x4000:0x8000]
-            banks[0] = ram[0x8000:0xC000]
+            banks[1] = ram[0x4000:0x8000]
+            banks[2] = ram[0x8000:0xC000]
             self.machine = '48K'
         else:
             if data_len < 32:
@@ -503,7 +504,6 @@ class Z80(Snapshot):
             add_hdr_len = get_word(data, 30)
             if add_hdr_len not in (23, 54, 55):
                 raise SnapshotError(f'Invalid additional header length {add_hdr_len} (expected 23, 54 or 55)')
-            page = None
             i = 32 + add_hdr_len
             if data_len < i:
                 raise SnapshotError(f'Header is {data_len} bytes (expected {i})')
@@ -529,13 +529,14 @@ class Z80(Snapshot):
             if machine_id[0] in m48_ids:
                 self.machine = '48K'
             elif machine_id[0] in m128_ids:
+                exp_banks = set(range(8))
                 if machine_id[0] == 12 or machine_id[1] == 1:
                     self.machine = '+2'
                 else:
                     self.machine = '128K'
             if (i == 55 and 2 < machine_id[0] < 14) or (i > 55 and 3 < machine_id[0] < 14):
                 page = data[35] % 8 # 128K
-            while i < len(data):
+            while i + 2 < len(data):
                 length = data[i] + 256 * data[i + 1]
                 bank = data[i + 2] - 3
                 if length == 65535:
@@ -546,6 +547,9 @@ class Z80(Snapshot):
                 if len(banks[bank]) != 16384:
                     raise SnapshotError(f'Page {bank} is {len(banks[bank])} bytes (should be 16384)')
                 i += 3 + length
+        missing = sorted(str(b) for b in exp_banks - set(banks))
+        if missing:
+            raise SnapshotError('Missing RAM bank(s) {}'.format(', '.join(missing)))
         self.a = self.header[0]
         self.f = self.header[1]
         self.bc = get_word(self.header, 2)
@@ -693,13 +697,8 @@ class Z80(Snapshot):
             # 48K
             banks = [None] * 8
             banks[5] = ram[0x0000:0x4000]
-            if len(self.header) == 30:
-                # Version 1
-                banks[2] = ram[0x4000:0x8000]
-                banks[0] = ram[0x8000:0xC000]
-            else:
-                banks[1] = ram[0x4000:0x8000]
-                banks[2] = ram[0x8000:0xC000]
+            banks[1] = ram[0x4000:0x8000]
+            banks[2] = ram[0x8000:0xC000]
         self.memory = Memory(banks=banks)
 
     def set_registers_and_state(self, registers, state):
@@ -712,7 +711,7 @@ class Z80(Snapshot):
             # Version 1
             self.header[12] |= 32 # RAM is compressed
             z80.extend(self.header)
-            ram = self.memory.banks[5] + self.memory.banks[2] + self.memory.banks[0]
+            ram = self.memory.banks[5] + self.memory.banks[1] + self.memory.banks[2]
             z80.extend(self._make_z80_ram_block(ram))
         else:
             z80.extend(self.header)
