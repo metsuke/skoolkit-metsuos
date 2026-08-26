@@ -427,6 +427,9 @@ def _get_pzx_block(data, i, block_num, prev_rom_pilot):
     # http://zxds.raxoft.cz/docs/pzx.txt
     block_id = ''.join(chr(b) for b in data[i:i + 4])
     block_len = get_dword(data, i + 4)
+    missing = i + 8 + block_len - len(data)
+    if missing > 0:
+        raise SkoolKitError(f'{block_id} block missing {missing} byte(s)')
     block_data = None
     tape_data = None
     timings = None
@@ -434,6 +437,8 @@ def _get_pzx_block(data, i, block_num, prev_rom_pilot):
     rom_pilot = False
     info = []
     if block_id == 'PZXT':
+        if block_len < 2:
+            raise SkoolKitError(f'PZXT block length ({block_len}) is too small')
         name = 'PZX header block'
         info.append(f'Version: {data[i + 8]}.{data[i + 9]}')
         pairs = ['Title', '']
@@ -455,14 +460,23 @@ def _get_pzx_block(data, i, block_num, prev_rom_pilot):
         pulses = []
         j = i + 8
         while j < i + 8 + block_len:
+            missing = j + 2 - len(data)
+            if missing > 0:
+                raise SkoolKitError(f'PULS block missing {missing} byte(s) in count/duration1 field')
             count = 1
             duration = get_word(data, j)
             j += 2
             if duration > 0x8000:
+                missing = j + 2 - len(data)
+                if missing > 0:
+                    raise SkoolKitError(f'PULS block missing {missing} byte(s) in duration1 field')
                 count = duration % 0x8000
                 duration = get_word(data, j)
                 j += 2
             if duration >= 0x8000:
+                missing = j + 2 - len(data)
+                if missing > 0:
+                    raise SkoolKitError(f'PULS block missing {missing} byte(s) in duration2 field')
                 duration = (duration % 0x8000) * 65536 + get_word(data, j)
                 j += 2
             info.append(f'{count} x {duration} T-states')
@@ -475,6 +489,8 @@ def _get_pzx_block(data, i, block_num, prev_rom_pilot):
             polarity = 0
         timings = TapeBlockTimings(pulses, polarity=polarity)
     elif block_id == 'DATA':
+        if block_len < 8:
+            raise SkoolKitError(f'DATA block length ({block_len}) is too small')
         name = 'Data block'
         count = get_dword(data, i + 8)
         bits = count % 0x80000000
@@ -483,12 +499,24 @@ def _get_pzx_block(data, i, block_num, prev_rom_pilot):
         used_bits = (bits % 8) or 8
         tail = get_word(data, i + 12)
         p0, p1 = data[i + 14:i + 16]
-        j = i + 16
-        s0 = tuple(get_word(data, k) for k in range(j, j + 2 * p0, 2))
-        j += 2 * p0
-        s1 = tuple(get_word(data, k) for k in range(j, j + 2 * p1, 2))
-        j += 2 * p1
-        tape_data = data[j:j + num_bytes + int(used_bits < 8)]
+        j0 = i + 16
+        j1 = j0 + 2 * p0
+        missing = j1 - len(data)
+        if missing > 0:
+            raise SkoolKitError(f'DATA block missing {missing} byte(s) in s0 field')
+        s0 = tuple(get_word(data, k) for k in range(j0, j1, 2))
+        j0 = j1
+        j1 += 2 * p1
+        missing = j1 - len(data)
+        if missing > 0:
+            raise SkoolKitError(f'DATA block missing {missing} byte(s) in s1 field')
+        s1 = tuple(get_word(data, k) for k in range(j0, j1, 2))
+        j0 = j1
+        j1 += num_bytes + int(used_bits < 8)
+        missing = j1 - len(data)
+        if missing > 0:
+            raise SkoolKitError(f'DATA block missing {missing} byte(s) in data field')
+        tape_data = data[j0:j1]
         standard = prev_rom_pilot and p0 == 2 and p1 == 2 and s0 == (855, 855) and s1 == (1710, 1710)
         if used_bits < 8:
             info.append(f'Bits: {bits} ({num_bytes} bytes + {used_bits} bits)')
@@ -502,6 +530,8 @@ def _get_pzx_block(data, i, block_num, prev_rom_pilot):
         ))
         timings = TapeBlockTimings(zero=s0, one=s1, used_bits=used_bits, tail=tail, polarity=polarity)
     elif block_id == 'PAUS':
+        if block_len < 4:
+            raise SkoolKitError(f'PAUS block length ({block_len}) is too small')
         name = 'Pause'
         duration = get_dword(data, i + 8)
         polarity = duration >> 31
@@ -514,6 +544,8 @@ def _get_pzx_block(data, i, block_num, prev_rom_pilot):
         name = 'Browse point'
         info.append(''.join(chr(b) for b in data[i + 8:i + 8 + block_len]))
     elif block_id == 'STOP':
+        if block_len < 2:
+            raise SkoolKitError(f'STOP block length ({block_len}) is too small')
         name = 'Stop tape command'
         flags = get_word(data, i + 8)
         mode = ('Always', '48K only')[flags & 1]
@@ -841,13 +873,13 @@ def hex_dump(data, row_size=16):
 def parse_pzx(pzx, start=1, stop=0, skip=()):
     if isinstance(pzx, str):
         pzx = read_bin_file(pzx)
-    if pzx[:4] != b'PZXT':
+    if len(pzx) < 8 or pzx[:4] != b'PZXT':
         raise SkoolKitError('Not a PZX file')
     blocks = []
     block_num = 1
     rom_pilot = False
     i = 0
-    while i < len(pzx):
+    while i + 8 < len(pzx):
         if block_num >= stop > 0:
             break
         i, block, rom_pilot = _get_pzx_block(pzx, i, block_num, rom_pilot)
