@@ -6,23 +6,25 @@ import os
 import zlib
 
 PALETTE = {
-    (0, 254, 0): 'TRANSPARENT',
-    (0, 0, 0): 'BLACK',
-    (0, 0, 197): 'BLUE',
-    (197, 0, 0): 'RED',
-    (197, 0, 197): 'MAGENTA',
-    (0, 198, 0): 'GREEN',
-    (0, 198, 197): 'CYAN',
-    (197, 198, 0): 'YELLOW',
-    (205, 198, 205): 'WHITE',
-    (0, 0, 255): 'BRIGHT_BLUE',
-    (255, 0, 0): 'BRIGHT_RED',
-    (255, 0, 255): 'BRIGHT_MAGENTA',
-    (0, 255, 0): 'BRIGHT_GREEN',
-    (0, 255, 255): 'BRIGHT_CYAN',
-    (255, 255, 0): 'BRIGHT_YELLOW',
-    (255, 255, 255): 'BRIGHT_WHITE'
+    (0, 254, 0): ('TRANSPARENT', 'T'),
+    (0, 0, 0): ('BLACK', '0'),
+    (0, 0, 197): ('BLUE', '1'),
+    (197, 0, 0): ('RED', '2'),
+    (197, 0, 197): ('MAGENTA', '3'),
+    (0, 198, 0): ('GREEN', '4'),
+    (0, 198, 197): ('CYAN', '5'),
+    (197, 198, 0): ('YELLOW', '6'),
+    (205, 198, 205): ('WHITE', '7'),
+    (0, 0, 255): ('BRIGHT_BLUE', '9'),
+    (255, 0, 0): ('BRIGHT_RED', 'A'),
+    (255, 0, 255): ('BRIGHT_MAGENTA', 'B'),
+    (0, 255, 0): ('BRIGHT_GREEN', 'C'),
+    (0, 255, 255): ('BRIGHT_CYAN', 'D'),
+    (255, 255, 0): ('BRIGHT_YELLOW', 'E'),
+    (255, 255, 255): ('BRIGHT_WHITE', 'F')
 }
+
+UNKNOWN_COLOUR = ('UNKNOWN', '?')
 
 class PNGError(Exception):
     pass
@@ -281,7 +283,7 @@ def analyse_png(data, summary):
             num_entries = chunk_length // 3
             while j < chunk_length:
                 entry = tuple(chunk_data[j:j + 3])
-                print('{:5d} {} (palette entry {}/{}: {})'.format(i, _byte_str(entry), p, num_entries, PALETTE.get(entry, 'UNKNOWN')))
+                print('{:5d} {} (palette entry {}/{}: {})'.format(i, _byte_str(entry), p, num_entries, PALETTE.get(entry, UNKNOWN_COLOUR)[0]))
                 i += len(entry)
                 j += len(entry)
                 p += 1
@@ -374,8 +376,16 @@ def dump_png(data):
     for f, pixels in enumerate(frames):
         for y, row in enumerate(pixels):
             for x, pixel in enumerate(row):
-                colour = PALETTE.get(tuple(pixel), 'UNKNOWN')
+                colour = PALETTE.get(tuple(pixel), UNKNOWN_COLOUR)[0]
                 print('{}: ({},{}): {} ({})'.format(f, x, y, ','.join([str(v) for v in pixel]), colour))
+
+def dump_pixels(data):
+    frames = _get_png_info(data)[2]
+    for f, pixels in enumerate(frames):
+        if f:
+            print()
+        for row in pixels:
+            print(''.join(PALETTE.get(tuple(pixel), UNKNOWN_COLOUR)[1] for pixel in row))
 
 ###############################################################################
 # Begin
@@ -393,6 +403,8 @@ group.add_argument('--dump', action='store_true',
                    help="Dump image info and pixel values")
 group.add_argument('-f', dest='show_filters', action='store_true',
                    help="Show the filter types used in the image data")
+group.add_argument('-p', dest='pixels', action='store_true',
+                   help="Display matrices of pixels as hex digits from 0 (black) to F (bright white) or T (transparent)")
 group.add_argument('-s', dest='summary', action='store_true',
                    help="Hide IDAT/fdAT data and show a summary instead")
 namespace, unknown_args = parser.parse_known_args()
@@ -411,6 +423,8 @@ try:
         show_diffs(namespace.args[0], file_data[0], namespace.args[1], file_data[1])
     elif namespace.dump:
         dump_png(file_data[0])
+    elif namespace.pixels:
+        dump_pixels(file_data[0])
     else:
         analyse_png(file_data[0], namespace.summary)
 except PNGError as e:
