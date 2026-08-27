@@ -3,6 +3,10 @@
 # Verify that the code examples in the 'Extending SkoolKit' documentation
 # actually work
 
+TIMESTAMP=$(date "+%a %d %b %Y %H:%M:%S %Z")
+DATE=$(date "+%Y-%m-%d")
+SKOOLKIT_VERSION=$(./skool2asm.py -V | cut -f2 -d' ')
+
 write_skool() {
   cat <<EOF
 @start
@@ -109,10 +113,10 @@ class GameHtmlWriter(HtmlWriter):
         return self.handle_image(frames, fname, cwd)
 
     def timestamp(self, cwd):
-        return time.strftime("%a %d %b %Y %H:%M:%S %Z")
+        return "${TIMESTAMP}"
 
     def expand_timestamp(self, text, index, cwd):
-        return index, time.strftime("%a %d %b %Y %H:%M:%S %Z")
+        return index, "${TIMESTAMP}"
 
     def copyright(self, cwd):
         if not hasattr(self, 'init_called'):
@@ -133,15 +137,145 @@ class GameAsmWriter(AsmWriter):
         return end, str(self.snapshot[address] + 256 * self.snapshot[address + 1])
 
     def timestamp(self):
-        return time.strftime("%a %d %b %Y %H:%M:%S %Z")
+        return "${TIMESTAMP}"
 
     def expand_timestamp(self, text, index):
-        return index, time.strftime("%a %d %b %Y %H:%M:%S %Z")
+        return index, "${TIMESTAMP}"
 
     def copyright(self):
         if not hasattr(self, 'init_called'):
             raise Exception('init() not called')
         return self.expand('#CHR169')
+EOF
+}
+
+write_exp_asm() {
+  cat <<EOF
+; Start
+;
+; Test the timestamp() method: ${TIMESTAMP}
+;
+; Test the #TIMESTAMP macro: ${TIMESTAMP}
+;
+; Test the snapshot attribute: the word at 32768 is 513
+;
+; © 2026 Me
+  DEFB 1,2,4,8,16,32,64,128
+
+EOF
+}
+
+write_exp_html() {
+  head -c -1 <<EOF
+<!DOCTYPE html>
+<html>
+<head>
+<title>game: Data at 32768</title>
+<meta charset="utf-8" />
+<link rel="stylesheet" type="text/css" href="../skoolkit.css" />
+</head>
+<body class="Asm-b">
+<table class="header">
+<tr>
+<td class="logo"><a href="../index.html">game</a></td>
+<td class="page-header">Data</td>
+</tr>
+</table>
+<table class="asm-navigation">
+<tr>
+<td class="prev">
+</td>
+<td class="up">Up: <a href="../maps/all.html#32768">Map</a></td>
+<td class="next">
+</td>
+</tr>
+</table>
+<div class="description">32768: Start</div>
+<table class="disassembly">
+<tr>
+<td class="routine-comment" colspan="5">
+<div class="details">
+<div class="paragraph">
+Test the timestamp() method: ${TIMESTAMP}
+</div>
+<div class="paragraph">
+Test the #TIMESTAMP macro: ${TIMESTAMP}
+</div>
+<div class="paragraph">
+Test the snapshot attribute: the word at 32768 is 513
+</div>
+<div class="paragraph">
+<table class="">
+<tr>
+<td class="" colspan="1" rowspan="1"><img alt="j4" src="../images/j4.png" /></td>
+<td class="" colspan="1" rowspan="1"></td>
+<td class="" colspan="1" rowspan="1"><img alt="anim" src="../images/udgs/anim.png" /></td>
+</tr>
+<tr>
+<td class="" colspan="1" rowspan="1">&#35;SPRITE4(j4*)</td>
+<td class="" colspan="1" rowspan="1">&#35;SPRITE6(*j6)</td>
+<td class="" colspan="1" rowspan="1">&#35;FRAMES(j4;j6)(anim.png)</td>
+</tr>
+</table>
+</div>
+<div class="paragraph">
+<table class="">
+<tr>
+<td class="" colspan="1" rowspan="1"><img alt="j3" src="../images/j3.png" /></td>
+</tr>
+<tr>
+<td class="" colspan="1" rowspan="1">&#35;CALL(sprite(3,j3))</td>
+</tr>
+</table>
+</div>
+<div class="paragraph">
+<table class="">
+<tr>
+<td class="" colspan="1" rowspan="1"><img alt="inverse32768_56" src="../images/inverse32768_56.png" /></td>
+</tr>
+<tr>
+<td class="" colspan="1" rowspan="1">&#35;INVERSE32768,56</td>
+</tr>
+</table>
+</div>
+<div class="paragraph">
+<table class="">
+<tr>
+<td class="" colspan="1" rowspan="1"><img alt="countdown" src="../images/countdown.png" /></td>
+</tr>
+<tr>
+<td class="" colspan="1" rowspan="1">&#35;CALL(countdown(countdown.png))</td>
+</tr>
+</table>
+</div>
+<div class="paragraph">
+&#169; 2026 Me
+</div>
+</div>
+</td>
+</tr>
+<tr>
+<td class="address-1"><span id="32768"></span>32768</td>
+<td class="instruction">DEFB 1,2,4,8,16,32,64,128</td>
+<td class="comment-0" rowspan="1"></td>
+</tr>
+</table>
+<table class="asm-navigation">
+<tr>
+<td class="prev">
+</td>
+<td class="up">Up: <a href="../maps/all.html#32768">Map</a></td>
+<td class="next">
+</td>
+</tr>
+</table>
+<footer>
+<div class="release">test-api ${DATE}</div>
+<div class="copyright"></div>
+<div class="created">Created using <a href="https://skoolkit.ca">SkoolKit</a> ${SKOOLKIT_VERSION}.</div>
+</footer>
+</body>
+</html>
 EOF
 }
 
@@ -163,8 +297,28 @@ write_skool > build/game.skool
 write_ref > build/game.ref
 write_module > skoolkit/game.py
 
+GAME_ASM=build/game.asm
 rm -rf build/html/game
 $SKOOL2HTML -d build/html build/game.skool
-$SKOOL2ASM build/game.skool > build/game.asm
+$SKOOL2ASM build/game.skool > $GAME_ASM
 
 rm skoolkit/game.py*
+
+ASM_DIFF=build/game.asm.diff
+echo -en "\nChecking $GAME_ASM: "
+diff -u <(write_exp_asm) $GAME_ASM > $ASM_DIFF
+if [[ -s $ASM_DIFF ]]; then
+  echo -e "\e[0;31mFAILED (see $ASM_DIFF)\e[0m"
+else
+  echo "OK"
+fi
+
+GAME_HTML=build/html/game/asm/32768.html
+HTML_DIFF=build/game.html.diff
+echo -n "Checking $GAME_HTML: "
+diff -u <(write_exp_html) $GAME_HTML > $HTML_DIFF
+if [[ -s $HTML_DIFF ]]; then
+  echo -e "\e[0;31mFAILED (see $HTML_DIFF)\e[0m"
+else
+  echo "OK"
+fi
