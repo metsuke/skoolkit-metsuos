@@ -1191,6 +1191,25 @@ class TapinfoTest(SkoolKitTestCase):
         self.assertEqual(output, 'BASIC DONE!\n')
         self.assertEqual(exp_snapshot, mock_basic_lister.snapshot)
 
+    def test_option_b_with_pzx_block_without_data(self):
+        pzx = PZX()
+        pzx.add_puls() # Block 2 (no data)
+        pzx.add_data([0])
+        pzxfile = self.write_bin_file(pzx.data, suffix='.pzx')
+        with self.assertRaises(SkoolKitError) as cm:
+            self.run_tapinfo(f'-b 2 {pzxfile}')
+        self.assertEqual(cm.exception.args[0], 'Block 2 has no data')
+
+    def test_option_b_with_tzx_block_without_data(self):
+        tzxfile = self._write_tzx((
+            create_tzx_data_block([1]), # Block 1
+            (0x12, 0, 2, 1, 0),         # Block 2 (Pure Tone - no data)
+            create_tzx_data_block([3])  # Block 3
+        ))
+        with self.assertRaises(SkoolKitError) as cm:
+            self.run_tapinfo(f'-b 2 {tzxfile}')
+        self.assertEqual(cm.exception.args[0], 'Block 2 has no data')
+
     def test_option_b_with_invalid_block_spec(self):
         exp_error = 'Invalid block specification'
         self._test_bad_spec('-b', 'q', exp_error)

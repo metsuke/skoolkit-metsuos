@@ -83,6 +83,8 @@ def _print_block(index, data, show_data, text_reader, info, block_id, header, st
 
 def _list_basic(cur_block_num, data, block_num, address):
     if block_num == cur_block_num:
+        if not data:
+            raise SkoolKitError(f'Block {block_num} has no data')
         snapshot = [0] * address + list(data[1:-1])
         print(BasicLister().list_basic(snapshot))
 
