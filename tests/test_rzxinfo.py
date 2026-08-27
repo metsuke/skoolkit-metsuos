@@ -5,6 +5,13 @@ from skoolkittest import SkoolKitTestCase, RZX
 from skoolkit import VERSION, SkoolKitError
 
 class RzxinfoTest(SkoolKitTestCase):
+    def _get_header(self):
+        return bytearray((
+            82, 90, 88, 33, # RZX!
+            0, 13,          # Major/minor version number
+            0, 0, 0, 0      # Flags
+        ))
+
     def _test_rzx(self, rzx, exp_output, options=''):
         if not rzx.creator:
             rzx.set_creator('SkoolKit', 9, 2)
@@ -336,6 +343,110 @@ class RzxinfoTest(SkoolKitTestCase):
         with self.assertRaises(SkoolKitError) as cm:
             self.run_rzxinfo(invalid_rzx)
         self.assertEqual(cm.exception.args[0], 'Not an RZX file')
+
+    def test_unexpected_eof_in_block_length_field(self):
+        rzx = self._get_header()
+        rzx.extend((
+            0x10,    # Block ID (Creator information)
+            29, 0, 0 # Block length (truncated DWORD)
+        ))
+        exp_output = """
+            Version: 0.13
+            Signed: No
+        """
+        with self.assertRaises(SkoolKitError) as cm:
+            self.run_rzxinfo(self.write_bin_file(rzx, suffix='.rzx'))
+        self.assertEqual(dedent(exp_output).lstrip(), self.out.getvalue())
+        self.assertEqual(self.err.getvalue(), '')
+        self.assertEqual(cm.exception.args[0], 'Unexpected end of file')
+
+    def test_unexpected_eof_in_creator_information_block(self):
+        rzx = self._get_header()
+        creator = [ord(c) for c in 'SkoolKit']
+        creator += [0] * (20 - len(creator))
+        rzx.extend((
+            0x10,        # Block ID (Creator information)
+            27, 0, 0, 0, # Block length
+            *creator,
+            10, 0,       # Creator's major version number
+            2            # Creator's minor version number (truncated WORD)
+        ))
+        exp_output = """
+            Version: 0.13
+            Signed: No
+            Creator information:
+        """
+        with self.assertRaises(SkoolKitError) as cm:
+            self.run_rzxinfo(self.write_bin_file(rzx, suffix='.rzx'))
+        self.assertEqual(dedent(exp_output).lstrip(), self.out.getvalue())
+        self.assertEqual(self.err.getvalue(), '')
+        self.assertEqual(cm.exception.args[0], 'Unexpected end of file')
+
+    def test_unexpected_eof_in_snapshot_block(self):
+        rzx = self._get_header()
+        rzx.extend((
+            0x30,          # Block ID (Snapshot)
+            16, 0, 0, 0,   # Block length
+            0, 0, 0, 0,    # Flags
+            83, 78, 65, 0, # SNA
+            0, 0, 0        # Uncompressed snapshot length (truncated DWORD)
+        ))
+        exp_output = """
+            Version: 0.13
+            Signed: No
+            Snapshot:
+        """
+        with self.assertRaises(SkoolKitError) as cm:
+            self.run_rzxinfo(self.write_bin_file(rzx, suffix='.rzx'))
+        self.assertEqual(dedent(exp_output).lstrip(), self.out.getvalue())
+        self.assertEqual(self.err.getvalue(), '')
+        self.assertEqual(cm.exception.args[0], 'Unexpected end of file')
+
+    def test_unexpected_eof_in_input_recording_block(self):
+        rzx = self._get_header()
+        rzx.extend((
+            0x80,        # Block ID (Input recording)
+            17, 0, 0, 0, # Block length
+            50, 0, 0, 0, # Number of frames
+            0,           # Reserved
+            0, 0, 0, 0,  # T-states counter
+            0, 0, 0      # Flags (truncated DWORD)
+        ))
+        exp_output = """
+            Version: 0.13
+            Signed: No
+            Input recording:
+              Number of frames: 50 (0h00m01s)
+              T-states: 0
+        """
+        with self.assertRaises(SkoolKitError) as cm:
+            self.run_rzxinfo(self.write_bin_file(rzx, suffix='.rzx'))
+        self.assertEqual(dedent(exp_output).lstrip(), self.out.getvalue())
+        self.assertEqual(self.err.getvalue(), '')
+        self.assertEqual(cm.exception.args[0], 'Unexpected end of file')
+
+    def test_block_missing_data(self):
+        rzx = self._get_header()
+        creator = [ord(c) for c in 'SkoolKit']
+        creator += [0] * (20 - len(creator))
+        rzx.extend((
+            0x10,        # Block ID (Creator information)
+            99, 0, 0, 0, # Block length (99)
+            *creator,
+            10, 0, 2, 0, # Creator's major/minor version number
+            0, 0, 0      # Custom data
+        ))
+        exp_output = """
+            Version: 0.13
+            Signed: No
+            Creator information:
+              ID: SkoolKit 10.2 (0.10.0.2)
+        """
+        with self.assertRaises(SkoolKitError) as cm:
+            self.run_rzxinfo(self.write_bin_file(rzx, suffix='.rzx'))
+        self.assertEqual(dedent(exp_output).lstrip(), self.out.getvalue())
+        self.assertEqual(self.err.getvalue(), '')
+        self.assertEqual(cm.exception.args[0], 'Block is missing 67 byte(s)')
 
     def test_nonexistent_rzx_file(self):
         with self.assertRaises(SkoolKitError) as cm:

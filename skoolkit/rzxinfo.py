@@ -127,6 +127,8 @@ def _show_blocks(data, options):
         else:
             print(f'Unknown block ID: 0x{block_id:02X}')
         i += block_len
+    if i > len(data):
+        raise SkoolKitError(f'Block is missing {i - len(data)} byte(s)')
 
 def _extract_snapshots(data, prefix):
     i = 10
@@ -160,7 +162,10 @@ def run(infile, options):
     if options.extract:
         _extract_snapshots(data, os.path.basename(infile))
     else:
-        _show_blocks(data, options)
+        try:
+            _show_blocks(data, options)
+        except IndexError:
+            raise SkoolKitError('Unexpected end of file')
 
 def main(args):
     parser = argparse.ArgumentParser(

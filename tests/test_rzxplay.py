@@ -64,6 +64,13 @@ def mock_write_snapshot(fname, ram, registers, state, machine):
     s_machine = machine
 
 class RzxplayTest(SkoolKitTestCase):
+    def _get_header(self):
+        return bytearray((
+            82, 90, 88, 33, # RZX!
+            0, 13,          # Major/minor version number
+            0, 0, 0, 0      # Flags
+        ))
+
     def _get_rzx(self, pc=0x8000, frames=((1, 0, ()),), code=(), tstates=0):
         ram = [0] * 0xC000
         if code:
@@ -1372,6 +1379,46 @@ class RzxplayTest(SkoolKitTestCase):
         with self.assertRaises(SkoolKitError) as cm:
             self.run_rzxplay(f'--quiet --no-screen {rzxfile}')
         self.assertEqual(cm.exception.args[0], 'Not an RZX file')
+
+    def test_unexpected_eof_in_block_length_field(self):
+        rzx = self._get_header()
+        rzx.extend((
+            0x10,    # Block ID (Creator information)
+            29, 0, 0 # Block length (truncated DWORD)
+        ))
+        with self.assertRaises(SkoolKitError) as cm:
+            self.run_rzxplay(self.write_bin_file(rzx, suffix='.rzx'))
+        self.assertEqual(self.out.getvalue(), '')
+        self.assertEqual(self.err.getvalue(), '')
+        self.assertEqual(cm.exception.args[0], 'Unexpected end of file')
+
+    def test_unexpected_eof_in_snapshot_block(self):
+        rzx = self._get_header()
+        rzx.extend((
+            0x30,      # Block ID (Snapshot)
+            5, 0, 0, 0 # Block length
+        ))
+        with self.assertRaises(SkoolKitError) as cm:
+            self.run_rzxplay(self.write_bin_file(rzx, suffix='.rzx'))
+        self.assertEqual(self.out.getvalue(), '')
+        self.assertEqual(self.err.getvalue(), '')
+        self.assertEqual(cm.exception.args[0], 'Unexpected end of file')
+
+    def test_unexpected_eof_in_input_recording_block(self):
+        rzx = self._get_header()
+        rzx.extend((
+            0x80,        # Block ID (Input recording)
+            17, 0, 0, 0, # Block length
+            1, 0, 0, 0,  # Number of frames
+            0,           # Reserved
+            0, 0, 0, 0,  # T-states counter
+            0, 0, 0      # Flags (truncated DWORD)
+        ))
+        with self.assertRaises(SkoolKitError) as cm:
+            self.run_rzxplay(self.write_bin_file(rzx, suffix='.rzx'))
+        self.assertEqual(self.out.getvalue(), '')
+        self.assertEqual(self.err.getvalue(), '')
+        self.assertEqual(cm.exception.args[0], 'Unexpected end of file')
 
     def test_nonexistent_rzx_file(self):
         with self.assertRaises(SkoolKitError) as cm:

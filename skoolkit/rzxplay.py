@@ -375,7 +375,10 @@ def process_block(block, options, flags, context):
             break
 
 def run(infile, options, config):
-    rzx_blocks = parse_rzx(infile)
+    try:
+        rzx_blocks = parse_rzx(infile)
+    except IndexError:
+        raise SkoolKitError('Unexpected end of file')
     if options.snapshot:
         rzx_blocks.insert(0, RZXBlock(None, Snapshot.get(options.snapshot)))
     while rzx_blocks and isinstance(rzx_blocks[-1].obj, Snapshot):
