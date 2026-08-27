@@ -49,6 +49,13 @@ TZX_MIN_BLOCK_LENGTHS = {
     0x5A: 9
 }
 
+PZX_MIN_BLOCK_LENGTHS = {
+    'PZXT': 2,
+    'DATA': 8,
+    'PAUS': 4,
+    'STOP': 2
+}
+
 ARCHIVE_INFO = {
     0: "Full title",
     1: "Software house/publisher",
@@ -253,10 +260,11 @@ HARDWARE_INFO = {
 CHARS = {9: '\t', 13: '\n'}
 
 class Tape:
-    def __init__(self, blocks, version=None, warnings=()):
+    def __init__(self, blocks, version=None, warnings=(), error=None):
         self.blocks = blocks
         self.version = version
         self.warnings = warnings
+        self.error = error
 
 class TapeBlock:
     def __init__(self, number, tape_data, timings=None, block_id=None, name=None, info=(), standard=True, block_data=None):
@@ -461,7 +469,9 @@ def _get_pzx_block(data, i, block_num, prev_rom_pilot):
     block_len = get_dword(data, i + 4)
     missing = i + 8 + block_len - len(data)
     if missing > 0:
-        raise SkoolKitError(f'{block_id} block missing {missing} byte(s)')
+        return (-1, f'{block_id} block missing {missing} byte(s)', None)
+    if block_len < PZX_MIN_BLOCK_LENGTHS.get(block_id, 0):
+        return (-1, f'{block_id} block length ({block_len}) is too small', None)
     block_data = None
     tape_data = None
     timings = None
@@ -469,8 +479,6 @@ def _get_pzx_block(data, i, block_num, prev_rom_pilot):
     rom_pilot = False
     info = []
     if block_id == 'PZXT':
-        if block_len < 2:
-            raise SkoolKitError(f'PZXT block length ({block_len}) is too small')
         name = 'PZX header block'
         info.append(f'Version: {data[i + 8]}.{data[i + 9]}')
         pairs = ['Title', '']
@@ -494,21 +502,21 @@ def _get_pzx_block(data, i, block_num, prev_rom_pilot):
         while j < i + 8 + block_len:
             missing = j + 2 - len(data)
             if missing > 0:
-                raise SkoolKitError(f'PULS block missing {missing} byte(s) in count/duration1 field')
+                return (-1, f'PULS block missing {missing} byte(s) in count/duration1 field', None)
             count = 1
             duration = get_word(data, j)
             j += 2
             if duration > 0x8000:
                 missing = j + 2 - len(data)
                 if missing > 0:
-                    raise SkoolKitError(f'PULS block missing {missing} byte(s) in duration1 field')
+                    return (-1, f'PULS block missing {missing} byte(s) in duration1 field', None)
                 count = duration % 0x8000
                 duration = get_word(data, j)
                 j += 2
             if duration >= 0x8000:
                 missing = j + 2 - len(data)
                 if missing > 0:
-                    raise SkoolKitError(f'PULS block missing {missing} byte(s) in duration2 field')
+                    return (-1, f'PULS block missing {missing} byte(s) in duration2 field', None)
                 duration = (duration % 0x8000) * 65536 + get_word(data, j)
                 j += 2
             info.append(f'{count} x {duration} T-states')
@@ -521,8 +529,6 @@ def _get_pzx_block(data, i, block_num, prev_rom_pilot):
             polarity = 0
         timings = TapeBlockTimings(pulses, polarity=polarity)
     elif block_id == 'DATA':
-        if block_len < 8:
-            raise SkoolKitError(f'DATA block length ({block_len}) is too small')
         name = 'Data block'
         count = get_dword(data, i + 8)
         bits = count % 0x80000000
@@ -535,19 +541,19 @@ def _get_pzx_block(data, i, block_num, prev_rom_pilot):
         j1 = j0 + 2 * p0
         missing = j1 - len(data)
         if missing > 0:
-            raise SkoolKitError(f'DATA block missing {missing} byte(s) in s0 field')
+            return (-1, f'DATA block missing {missing} byte(s) in s0 field', None)
         s0 = tuple(get_word(data, k) for k in range(j0, j1, 2))
         j0 = j1
         j1 += 2 * p1
         missing = j1 - len(data)
         if missing > 0:
-            raise SkoolKitError(f'DATA block missing {missing} byte(s) in s1 field')
+            return (-1, f'DATA block missing {missing} byte(s) in s1 field', None)
         s1 = tuple(get_word(data, k) for k in range(j0, j1, 2))
         j0 = j1
         j1 += num_bytes + int(used_bits < 8)
         missing = j1 - len(data)
         if missing > 0:
-            raise SkoolKitError(f'DATA block missing {missing} byte(s) in data field')
+            return (-1, f'DATA block missing {missing} byte(s) in data field', None)
         tape_data = data[j0:j1]
         standard = prev_rom_pilot and p0 == 2 and p1 == 2 and s0 == (855, 855) and s1 == (1710, 1710)
         if used_bits < 8:
@@ -562,8 +568,6 @@ def _get_pzx_block(data, i, block_num, prev_rom_pilot):
         ))
         timings = TapeBlockTimings(zero=s0, one=s1, used_bits=used_bits, tail=tail, polarity=polarity)
     elif block_id == 'PAUS':
-        if block_len < 4:
-            raise SkoolKitError(f'PAUS block length ({block_len}) is too small')
         name = 'Pause'
         duration = get_dword(data, i + 8)
         polarity = duration >> 31
@@ -576,8 +580,6 @@ def _get_pzx_block(data, i, block_num, prev_rom_pilot):
         name = 'Browse point'
         info.append(''.join(chr(b) for b in data[i + 8:i + 8 + block_len]))
     elif block_id == 'STOP':
-        if block_len < 2:
-            raise SkoolKitError(f'STOP block length ({block_len}) is too small')
         name = 'Stop tape command'
         flags = get_word(data, i + 8)
         mode = ('Always', '48K only')[flags & 1]
@@ -587,9 +589,6 @@ def _get_pzx_block(data, i, block_num, prev_rom_pilot):
         name = block_id
     block = TapeBlock(block_num, tape_data, timings, block_id, name, info, standard, block_data)
     return i + 8 + block_len, block, rom_pilot
-
-def _tzx_error(block_num, block_id, msg):
-    return SkoolKitError(f'Block {block_num} (0x{block_id:02X}) {msg}')
 
 def _get_tzx_block(data, i, block_num, get_info, get_timings):
     # https://worldofspectrum.net/features/TZXformat.html
@@ -601,7 +600,7 @@ def _get_tzx_block(data, i, block_num, get_info, get_timings):
     standard = False
     i += 1
     if i + TZX_MIN_BLOCK_LENGTHS.get(block_id, 0) > len(data):
-        raise _tzx_error(block_num, block_id, 'is too short')
+        return (-1, f'Block {block_num} (0x{block_id:02X}) is too short')
     if block_id == 0x10:
         # Standard speed data block
         header = 'Standard speed data'
@@ -662,7 +661,7 @@ def _get_tzx_block(data, i, block_num, get_info, get_timings):
         i += 1
         missing = i + 2 * num_pulses - len(data)
         if missing > 0:
-            raise _tzx_error(block_num, block_id, f'missing {missing} byte(s)')
+            return (-1, f'Block {block_num} (0x{block_id:02X}) missing {missing} byte(s)')
         pulses = []
         for pulse in range(num_pulses):
             pulse_len = get_word(data, i)
@@ -702,7 +701,7 @@ def _get_tzx_block(data, i, block_num, get_info, get_timings):
         m = i + 8 + num_bytes
         missing = m - len(data)
         if missing > 0:
-            raise _tzx_error(block_num, block_id, f'missing {missing} byte(s)')
+            return (-1, f'Block {block_num} (0x{block_id:02X}) missing {missing} byte(s)')
         if get_info:
             info.extend((
                 f'T-states per sample: {tps}',
@@ -827,7 +826,7 @@ def _get_tzx_block(data, i, block_num, get_info, get_timings):
                     info.extend(_format_text(prefix, data, index + 3, length))
                     index += length + 3
             except IndexError:
-                raise SkoolKitError('Unexpected end of file')
+                return (-1, 'Unexpected end of file')
         i += get_word(data, i) + 2
     elif block_id == 0x2A:
         # Stop the tape if in 48K mode
@@ -867,7 +866,7 @@ def _get_tzx_block(data, i, block_num, get_info, get_timings):
                     info.extend(_format_text(ARCHIVE_INFO.get(data[j], str(data[j])), data, j + 2, str_len))
                     j += 2 + str_len
             except IndexError:
-                raise SkoolKitError('Unexpected end of file')
+                return (-1, 'Unexpected end of file')
         i += get_word(data, i) + 2
     elif block_id == 0x33:
         # Hardware type
@@ -884,7 +883,7 @@ def _get_tzx_block(data, i, block_num, get_info, get_timings):
                     ))
                     i += 3
             except IndexError:
-                raise SkoolKitError('Unexpected end of file')
+                return (-1, 'Unexpected end of file')
         else:
             i += data[i] * 3 + 1
     elif block_id == 0x34:
@@ -908,9 +907,9 @@ def _get_tzx_block(data, i, block_num, get_info, get_timings):
         header = '"Glue" block'
         i += 9
     else:
-        raise SkoolKitError(f'Unknown TZX block ID: 0x{block_id:02X}')
+        return (-1, f'Unknown TZX block ID: 0x{block_id:02X}')
     if i > len(data):
-        raise _tzx_error(block_num, block_id, f'missing {i - len(data)} byte(s)')
+        return (-1, f'Block {block_num} (0x{block_id:02X}) missing {i - len(data)} byte(s)')
     return i, TapeBlock(block_num, tape_data, timings, block_id, header, info, standard, block_data)
 
 def hex_dump(data, row_size=16):
@@ -931,12 +930,15 @@ def parse_pzx(pzx, start=1, stop=0, skip=()):
     block_num = 1
     rom_pilot = False
     i = 0
+    error = None
     while i + 8 < len(pzx):
         if block_num >= stop > 0:
             break
-        i, block, rom_pilot = _get_pzx_block(pzx, i, block_num, rom_pilot)
+        i, obj, rom_pilot = _get_pzx_block(pzx, i, block_num, rom_pilot)
+        if i < 0:
+            return Tape(blocks, error=obj)
         if block_num >= start and block_num not in skip:
-            blocks.append(block)
+            blocks.append(obj)
         block_num += 1
     return Tape(blocks)
 
@@ -979,12 +981,15 @@ def parse_tzx(tzx, start=1, stop=0, skip=(), info=True, timings=False):
     blocks = []
     block_num = 1
     i = 10
+    error = None
     while i < len(tzx):
         if block_num >= stop > 0:
             break
-        i, block = _get_tzx_block(tzx, i, block_num, info, timings)
+        i, obj = _get_tzx_block(tzx, i, block_num, info, timings)
+        if i < 0:
+            return Tape(blocks, version, error=obj)
         if block_num >= start and block_num not in skip:
-            blocks.append(block)
+            blocks.append(obj)
         block_num += 1
     return Tape(blocks, version)
 

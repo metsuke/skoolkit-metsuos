@@ -58,9 +58,9 @@ class PZXTest(SkoolKitTestCase):
             5, 0, 0, 0,     # Block length (5)
             0, 0            # 2 bytes instead of 5
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_pzx(pzx)
-        self.assertEqual(cm.exception.args[0], 'PZXT block missing 3 byte(s)')
+        tape = parse_pzx(pzx)
+        self.assertEqual(len(tape.blocks), 0)
+        self.assertEqual(tape.error, 'PZXT block missing 3 byte(s)')
 
     def test_pzxt_block_too_short(self):
         pzx = bytes((
@@ -68,9 +68,9 @@ class PZXTest(SkoolKitTestCase):
             1, 0, 0, 0,     # Block length (1)
             0
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_pzx(pzx)
-        self.assertEqual(cm.exception.args[0], 'PZXT block length (1) is too small')
+        tape = parse_pzx(pzx)
+        self.assertEqual(len(tape.blocks), 0)
+        self.assertEqual(tape.error, 'PZXT block length (1) is too small')
 
     def test_data_block_missing_data(self):
         pzx = self._get_pzxt()
@@ -79,9 +79,9 @@ class PZXTest(SkoolKitTestCase):
             5, 0, 0, 0,     # Block length (5)
             0               # 1 byte instead of 5
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_pzx(pzx)
-        self.assertEqual(cm.exception.args[0], 'DATA block missing 4 byte(s)')
+        tape = parse_pzx(pzx)
+        self.assertEqual(len(tape.blocks), 1)
+        self.assertEqual(tape.error, 'DATA block missing 4 byte(s)')
 
     def test_data_block_too_short(self):
         pzx = self._get_pzxt()
@@ -92,9 +92,9 @@ class PZXTest(SkoolKitTestCase):
             0, 0,           # tail
             2               # p0
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_pzx(pzx)
-        self.assertEqual(cm.exception.args[0], 'DATA block length (7) is too small')
+        tape = parse_pzx(pzx)
+        self.assertEqual(len(tape.blocks), 1)
+        self.assertEqual(tape.error, 'DATA block length (7) is too small')
 
     def test_data_block_missing_data_in_s0_field(self):
         pzx = self._get_pzxt()
@@ -107,9 +107,9 @@ class PZXTest(SkoolKitTestCase):
             2,              # p1
             1, 0, 1         # s0 (1 byte short)
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_pzx(pzx)
-        self.assertEqual(cm.exception.args[0], 'DATA block missing 1 byte(s) in s0 field')
+        tape = parse_pzx(pzx)
+        self.assertEqual(len(tape.blocks), 1)
+        self.assertEqual(tape.error, 'DATA block missing 1 byte(s) in s0 field')
 
     def test_data_block_missing_data_in_s1_field(self):
         pzx = self._get_pzxt()
@@ -123,9 +123,9 @@ class PZXTest(SkoolKitTestCase):
             1, 0, 1, 0,     # s0
             2, 0, 2         # s1 (1 byte short)
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_pzx(pzx)
-        self.assertEqual(cm.exception.args[0], 'DATA block missing 1 byte(s) in s1 field')
+        tape = parse_pzx(pzx)
+        self.assertEqual(len(tape.blocks), 1)
+        self.assertEqual(tape.error, 'DATA block missing 1 byte(s) in s1 field')
 
     def test_data_block_missing_data_in_data_field(self):
         pzx = self._get_pzxt()
@@ -140,9 +140,9 @@ class PZXTest(SkoolKitTestCase):
             2, 0, 2, 0,     # s1
             0               # data (1 byte short)
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_pzx(pzx)
-        self.assertEqual(cm.exception.args[0], 'DATA block missing 1 byte(s) in data field')
+        tape = parse_pzx(pzx)
+        self.assertEqual(len(tape.blocks), 1)
+        self.assertEqual(tape.error, 'DATA block missing 1 byte(s) in data field')
 
     def test_puls_block_missing_data(self):
         pzx = self._get_pzxt()
@@ -151,9 +151,9 @@ class PZXTest(SkoolKitTestCase):
             5, 0, 0, 0,     # Block length (5)
             0, 0, 0         # 3 bytes instead of 5
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_pzx(pzx)
-        self.assertEqual(cm.exception.args[0], 'PULS block missing 2 byte(s)')
+        tape = parse_pzx(pzx)
+        self.assertEqual(len(tape.blocks), 1)
+        self.assertEqual(tape.error, 'PULS block missing 2 byte(s)')
 
     def test_puls_block_missing_data_in_count_field(self):
         pzx = self._get_pzxt()
@@ -162,9 +162,9 @@ class PZXTest(SkoolKitTestCase):
             1, 0, 0, 0,     # Block length (1)
             0               # count (1 byte short)
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_pzx(pzx)
-        self.assertEqual(cm.exception.args[0], 'PULS block missing 1 byte(s) in count/duration1 field')
+        tape = parse_pzx(pzx)
+        self.assertEqual(len(tape.blocks), 1)
+        self.assertEqual(tape.error, 'PULS block missing 1 byte(s) in count/duration1 field')
 
     def test_puls_block_missing_data_in_duration1_field(self):
         pzx = self._get_pzxt()
@@ -174,9 +174,9 @@ class PZXTest(SkoolKitTestCase):
             1, 128,         # count
             0               # duration1 (1 byte short)
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_pzx(pzx)
-        self.assertEqual(cm.exception.args[0], 'PULS block missing 1 byte(s) in duration1 field')
+        tape = parse_pzx(pzx)
+        self.assertEqual(len(tape.blocks), 1)
+        self.assertEqual(tape.error, 'PULS block missing 1 byte(s) in duration1 field')
 
     def test_puls_block_missing_data_in_duration2_field(self):
         pzx = self._get_pzxt()
@@ -187,9 +187,9 @@ class PZXTest(SkoolKitTestCase):
             1, 128,         # duration1
             0               # duration2 (1 byte short)
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_pzx(pzx)
-        self.assertEqual(cm.exception.args[0], 'PULS block missing 1 byte(s) in duration2 field')
+        tape = parse_pzx(pzx)
+        self.assertEqual(len(tape.blocks), 1)
+        self.assertEqual(tape.error, 'PULS block missing 1 byte(s) in duration2 field')
 
     def test_paus_block_missing_data(self):
         pzx = self._get_pzxt()
@@ -198,9 +198,9 @@ class PZXTest(SkoolKitTestCase):
             5, 0, 0, 0,     # Block length (5)
             0, 0            # 2 bytes instead of 5
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_pzx(pzx)
-        self.assertEqual(cm.exception.args[0], 'PAUS block missing 3 byte(s)')
+        tape = parse_pzx(pzx)
+        self.assertEqual(len(tape.blocks), 1)
+        self.assertEqual(tape.error, 'PAUS block missing 3 byte(s)')
 
     def test_paus_block_too_short(self):
         pzx = self._get_pzxt()
@@ -209,9 +209,9 @@ class PZXTest(SkoolKitTestCase):
             3, 0, 0, 0,     # Block length (3)
             0, 0, 0
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_pzx(pzx)
-        self.assertEqual(cm.exception.args[0], 'PAUS block length (3) is too small')
+        tape = parse_pzx(pzx)
+        self.assertEqual(len(tape.blocks), 1)
+        self.assertEqual(tape.error, 'PAUS block length (3) is too small')
 
     def test_stop_block_missing_data(self):
         pzx = self._get_pzxt()
@@ -220,9 +220,9 @@ class PZXTest(SkoolKitTestCase):
             5, 0, 0, 0,     # Block length (5)
             0, 0, 0, 0      # 4 bytes instead of 5
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_pzx(pzx)
-        self.assertEqual(cm.exception.args[0], 'STOP block missing 1 byte(s)')
+        tape = parse_pzx(pzx)
+        self.assertEqual(len(tape.blocks), 1)
+        self.assertEqual(tape.error, 'STOP block missing 1 byte(s)')
 
     def test_stop_block_too_short(self):
         pzx = self._get_pzxt()
@@ -231,9 +231,9 @@ class PZXTest(SkoolKitTestCase):
             1, 0, 0, 0,     # Block length (1)
             0
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_pzx(pzx)
-        self.assertEqual(cm.exception.args[0], 'STOP block length (1) is too small')
+        tape = parse_pzx(pzx)
+        self.assertEqual(len(tape.blocks), 1)
+        self.assertEqual(tape.error, 'STOP block length (1) is too small')
 
 class TZXTest(SkoolKitTestCase):
     def _get_header(self):
@@ -276,9 +276,9 @@ class TZXTest(SkoolKitTestCase):
             tzx = self._get_header()
             tzx.append(block_id)
             tzx.extend([0] * (min_len - 1)) # 1 byte too short
-            with self.assertRaises(SkoolKitError) as cm:
-                parse_tzx(tzx)
-            self.assertEqual(cm.exception.args[0], f'Block 1 (0x{block_id:02X}) is too short')
+            tape = parse_tzx(tzx)
+            self.assertEqual(len(tape.blocks), 0)
+            self.assertEqual(tape.error, f'Block 1 (0x{block_id:02X}) is too short')
 
     def test_block_0x10_missing_data(self):
         tzx = self._get_header()
@@ -288,9 +288,9 @@ class TZXTest(SkoolKitTestCase):
             4, 0, # Data length (4)
             0, 0  # 2 data bytes
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_tzx(tzx, info=False)
-        self.assertEqual(cm.exception.args[0], f'Block 1 (0x10) missing 2 byte(s)')
+        tape = parse_tzx(tzx, info=False)
+        self.assertEqual(len(tape.blocks), 0)
+        self.assertEqual(tape.error, f'Block 1 (0x10) missing 2 byte(s)')
 
     def test_block_0x11_missing_data(self):
         tzx = self._get_header()
@@ -300,9 +300,9 @@ class TZXTest(SkoolKitTestCase):
             5, 0, 0, # Data length (5)
             0, 0     # 2 data bytes
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_tzx(tzx, info=False)
-        self.assertEqual(cm.exception.args[0], f'Block 1 (0x11) missing 3 byte(s)')
+        tape = parse_tzx(tzx, info=False)
+        self.assertEqual(len(tape.blocks), 0)
+        self.assertEqual(tape.error, f'Block 1 (0x11) missing 3 byte(s)')
 
     def test_block_0x13_missing_data(self):
         tzx = self._get_header()
@@ -311,9 +311,9 @@ class TZXTest(SkoolKitTestCase):
             6,         # 6 pulses = 12 bytes
             0, 0, 0, 0 # 4 bytes
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_tzx(tzx, info=False)
-        self.assertEqual(cm.exception.args[0], f'Block 1 (0x13) missing 8 byte(s)')
+        tape = parse_tzx(tzx, info=False)
+        self.assertEqual(len(tape.blocks), 0)
+        self.assertEqual(tape.error, f'Block 1 (0x13) missing 8 byte(s)')
 
     def test_block_0x14_missing_data(self):
         tzx = self._get_header()
@@ -323,9 +323,9 @@ class TZXTest(SkoolKitTestCase):
             6, 0, 0, # Data length (6)
             0, 0     # 2 data bytes
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_tzx(tzx, info=False)
-        self.assertEqual(cm.exception.args[0], f'Block 1 (0x14) missing 4 byte(s)')
+        tape = parse_tzx(tzx, info=False)
+        self.assertEqual(len(tape.blocks), 0)
+        self.assertEqual(tape.error, f'Block 1 (0x14) missing 4 byte(s)')
 
     def test_block_0x15_missing_data(self):
         tzx = self._get_header()
@@ -335,9 +335,9 @@ class TZXTest(SkoolKitTestCase):
             6, 0, 0, # Data length (6)
             0, 0, 0  # 3 data bytes
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_tzx(tzx, info=False)
-        self.assertEqual(cm.exception.args[0], f'Block 1 (0x15) missing 3 byte(s)')
+        tape = parse_tzx(tzx, info=False)
+        self.assertEqual(len(tape.blocks), 0)
+        self.assertEqual(tape.error, f'Block 1 (0x15) missing 3 byte(s)')
 
     def test_block_0x16_missing_data(self):
         tzx = self._get_header()
@@ -346,9 +346,9 @@ class TZXTest(SkoolKitTestCase):
             7, 0, 0, 0, # Block length (7)
             0, 0, 0     # 3 bytes
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_tzx(tzx)
-        self.assertEqual(cm.exception.args[0], f'Block 1 (0x16) missing 4 byte(s)')
+        tape = parse_tzx(tzx)
+        self.assertEqual(len(tape.blocks), 0)
+        self.assertEqual(tape.error, f'Block 1 (0x16) missing 4 byte(s)')
 
     def test_block_0x17_missing_data(self):
         tzx = self._get_header()
@@ -357,9 +357,9 @@ class TZXTest(SkoolKitTestCase):
             8, 0, 0, 0, # Block length (8)
             0, 0, 0     # 3 bytes
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_tzx(tzx)
-        self.assertEqual(cm.exception.args[0], f'Block 1 (0x17) missing 5 byte(s)')
+        tape = parse_tzx(tzx)
+        self.assertEqual(len(tape.blocks), 0)
+        self.assertEqual(tape.error, f'Block 1 (0x17) missing 5 byte(s)')
 
     def test_block_0x18_missing_data(self):
         tzx = self._get_header()
@@ -370,9 +370,9 @@ class TZXTest(SkoolKitTestCase):
             0, 0, 0, 0,
             0, 0, 0, 0,
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_tzx(tzx, info=False)
-        self.assertEqual(cm.exception.args[0], f'Block 1 (0x18) missing 1 byte(s)')
+        tape = parse_tzx(tzx, info=False)
+        self.assertEqual(len(tape.blocks), 0)
+        self.assertEqual(tape.error, f'Block 1 (0x18) missing 1 byte(s)')
 
     def test_block_0x19_missing_data(self):
         tzx = self._get_header()
@@ -384,9 +384,9 @@ class TZXTest(SkoolKitTestCase):
             0, 0, 0, 0,
             0, 0, 0, 0,
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_tzx(tzx)
-        self.assertEqual(cm.exception.args[0], f'Block 1 (0x19) missing 1 byte(s)')
+        tape = parse_tzx(tzx)
+        self.assertEqual(len(tape.blocks), 0)
+        self.assertEqual(tape.error, f'Block 1 (0x19) missing 1 byte(s)')
 
     def test_block_0x21_missing_data(self):
         tzx = self._get_header()
@@ -395,9 +395,9 @@ class TZXTest(SkoolKitTestCase):
             6,    # Group name length (6)
             0, 0
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_tzx(tzx, info=False)
-        self.assertEqual(cm.exception.args[0], f'Block 1 (0x21) missing 4 byte(s)')
+        tape = parse_tzx(tzx, info=False)
+        self.assertEqual(len(tape.blocks), 0)
+        self.assertEqual(tape.error, f'Block 1 (0x21) missing 4 byte(s)')
 
     def test_block_0x26_missing_data(self):
         tzx = self._get_header()
@@ -406,9 +406,9 @@ class TZXTest(SkoolKitTestCase):
             5, 0,      # 5 calls = 10 bytes
             0, 0, 0, 0 # 4 bytes
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_tzx(tzx)
-        self.assertEqual(cm.exception.args[0], f'Block 1 (0x26) missing 6 byte(s)')
+        tape = parse_tzx(tzx)
+        self.assertEqual(len(tape.blocks), 0)
+        self.assertEqual(tape.error, f'Block 1 (0x26) missing 6 byte(s)')
 
     def test_block_0x28_unexpected_eof(self):
         tzx = self._get_header()
@@ -418,9 +418,9 @@ class TZXTest(SkoolKitTestCase):
             1,    # 1 selection (>=3 bytes)
             0, 0  # 2 bytes
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_tzx(tzx)
-        self.assertEqual(cm.exception.args[0], f'Unexpected end of file')
+        tape = parse_tzx(tzx)
+        self.assertEqual(len(tape.blocks), 0)
+        self.assertEqual(tape.error, f'Unexpected end of file')
 
     def test_block_0x28_missing_data(self):
         tzx = self._get_header()
@@ -429,9 +429,9 @@ class TZXTest(SkoolKitTestCase):
             11, 0,     # Block length (11)
             0, 0, 0, 0 # 4 bytes
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_tzx(tzx, info=False)
-        self.assertEqual(cm.exception.args[0], f'Block 1 (0x28) missing 7 byte(s)')
+        tape = parse_tzx(tzx, info=False)
+        self.assertEqual(len(tape.blocks), 0)
+        self.assertEqual(tape.error, f'Block 1 (0x28) missing 7 byte(s)')
 
     def test_block_0x30_missing_data(self):
         tzx = self._get_header()
@@ -440,9 +440,9 @@ class TZXTest(SkoolKitTestCase):
             6,    # Message length (6)
             0, 0
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_tzx(tzx, info=False)
-        self.assertEqual(cm.exception.args[0], f'Block 1 (0x30) missing 4 byte(s)')
+        tape = parse_tzx(tzx, info=False)
+        self.assertEqual(len(tape.blocks), 0)
+        self.assertEqual(tape.error, f'Block 1 (0x30) missing 4 byte(s)')
 
     def test_block_0x31_missing_data(self):
         tzx = self._get_header()
@@ -452,9 +452,9 @@ class TZXTest(SkoolKitTestCase):
             7,    # Message length (7)
             0, 0
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_tzx(tzx, info=False)
-        self.assertEqual(cm.exception.args[0], f'Block 1 (0x31) missing 5 byte(s)')
+        tape = parse_tzx(tzx, info=False)
+        self.assertEqual(len(tape.blocks), 0)
+        self.assertEqual(tape.error, f'Block 1 (0x31) missing 5 byte(s)')
 
     def test_block_0x32_missing_data(self):
         tzx = self._get_header()
@@ -463,9 +463,9 @@ class TZXTest(SkoolKitTestCase):
             9, 0,      # Block length (9)
             0, 0, 0, 0 # 4 bytes
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_tzx(tzx, info=False)
-        self.assertEqual(cm.exception.args[0], f'Block 1 (0x32) missing 5 byte(s)')
+        tape = parse_tzx(tzx, info=False)
+        self.assertEqual(len(tape.blocks), 0)
+        self.assertEqual(tape.error, f'Block 1 (0x32) missing 5 byte(s)')
 
     def test_block_0x33_unexpected_eof(self):
         tzx = self._get_header()
@@ -474,9 +474,9 @@ class TZXTest(SkoolKitTestCase):
             1,    # 1 entry = 3 bytes
             0, 0  # 2 bytes
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_tzx(tzx)
-        self.assertEqual(cm.exception.args[0], 'Unexpected end of file')
+        tape = parse_tzx(tzx)
+        self.assertEqual(len(tape.blocks), 0)
+        self.assertEqual(tape.error, 'Unexpected end of file')
 
     def test_block_0x33_missing_data(self):
         tzx = self._get_header()
@@ -485,9 +485,9 @@ class TZXTest(SkoolKitTestCase):
             2,         # 2 entries = 6 bytes
             0, 0, 0, 0 # 4 bytes
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_tzx(tzx, info=False)
-        self.assertEqual(cm.exception.args[0], f'Block 1 (0x33) missing 2 byte(s)')
+        tape = parse_tzx(tzx, info=False)
+        self.assertEqual(len(tape.blocks), 0)
+        self.assertEqual(tape.error, f'Block 1 (0x33) missing 2 byte(s)')
 
     def test_block_0x35_missing_data(self):
         tzx = self._get_header()
@@ -497,9 +497,9 @@ class TZXTest(SkoolKitTestCase):
             6, 0, 0, 0, # Length  of custom info (6)
             0, 0, 0     # 3 bytes
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_tzx(tzx, info=False)
-        self.assertEqual(cm.exception.args[0], f'Block 1 (0x35) missing 3 byte(s)')
+        tape = parse_tzx(tzx, info=False)
+        self.assertEqual(len(tape.blocks), 0)
+        self.assertEqual(tape.error, f'Block 1 (0x35) missing 3 byte(s)')
 
     def test_block_0x40_missing_data(self):
         tzx = self._get_header()
@@ -509,9 +509,9 @@ class TZXTest(SkoolKitTestCase):
             7, 0, 0, # Snapshot length (7)
             0, 0     # 2 bytes
         ))
-        with self.assertRaises(SkoolKitError) as cm:
-            parse_tzx(tzx, info=False)
-        self.assertEqual(cm.exception.args[0], f'Block 1 (0x40) missing 5 byte(s)')
+        tape = parse_tzx(tzx, info=False)
+        self.assertEqual(len(tape.blocks), 0)
+        self.assertEqual(tape.error, f'Block 1 (0x40) missing 5 byte(s)')
 
 class TapeWriteTest(SkoolKitTestCase):
     def test_write_pzx(self):

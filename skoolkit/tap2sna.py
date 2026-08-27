@@ -776,6 +776,8 @@ def _get_tape_blocks(tapes, sim, start, stop, skip, is48):
             tape, tape_blocks = _get_tzx_blocks(data, sim, b0, b1, skip, is48)
         else:
             tape, tape_blocks = _get_tap_blocks(data, b0, b1, skip)
+        if tape.error:
+            raise TapeError(tape.error)
         if tape.blocks:
             last_bn = tape.blocks[-1].number
         else:

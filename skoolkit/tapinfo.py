@@ -16,8 +16,8 @@
 
 import argparse
 
-from skoolkit import (SkoolKitError, get_word, get_int_param, integer_range,
-                      warn, VERSION)
+from skoolkit import (SkoolKitError, error, get_word, get_int_param,
+                      integer_range, warn, VERSION)
 from skoolkit.basic import BasicLister, TextReader
 from skoolkit.tape import get_edges, hex_dump, parse_pzx, parse_tap, parse_tzx
 
@@ -132,6 +132,8 @@ def _analyse_tape(tape, basic_block, text_reader, show_data):
             _print_block(block.number, block.data, show_data, text_reader, block.info, block.block_id, block.name, block.standard)
     for msg in tape.warnings:
         warn(msg)
+    if tape.error:
+        error(tape.error)
 
 def main(args):
     parser = argparse.ArgumentParser(

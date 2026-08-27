@@ -241,6 +241,33 @@ class TapinfoTest(SkoolKitTestCase):
         """
         self.assertEqual(dedent(exp_output).lstrip(), output)
 
+    def test_pzx_with_parse_error(self):
+        pzx = PZX()
+        pzx.add_puls()
+        pzx.add_data([0])
+        pzx.add_block('PAUS', (0, 0, 0))
+        exp_output = """
+            1: PZX header block
+              Version: 1.0
+            2: Pulse sequence
+              3223 x 2168 T-states
+              1 x 667 T-states
+              1 x 735 T-states
+            3: Data block
+              Bits: 8 (1 bytes)
+              Initial pulse level: 1
+              0-bit pulse sequence: 855, 855 (T-states)
+              1-bit pulse sequence: 1710, 1710 (T-states)
+              Tail pulse: 945 T-states
+              Type: Unknown
+              Length: 1
+              Data: 0
+        """
+        pzxfile = self.write_bin_file(pzx.data, suffix='.pzx')
+        output, error = self.run_tapinfo(pzxfile, catch_exit=1)
+        self.assertEqual(error, 'ERROR: PAUS block length (3) is too small\n')
+        self.assertEqual(dedent(exp_output).lstrip(), output)
+
     def test_invalid_pzx_file(self):
         invalid_pzx = self.write_text_file('This is not a PZX file', suffix='.pzx')
         with self.assertRaises(SkoolKitError) as cm:
@@ -391,12 +418,46 @@ class TapinfoTest(SkoolKitTestCase):
         self.assertEqual(cm.exception.args[0], 'TZX version number not found')
 
     def test_tzx_with_unknown_block(self):
-        block_id = 26
-        block = [block_id, 0]
-        tzxfile = self._write_tzx([block])
-        with self.assertRaises(SkoolKitError) as cm:
-            self.run_tapinfo(tzxfile)
-        self.assertEqual(cm.exception.args[0], f'Unknown TZX block ID: 0x{block_id:02X}')
+        tzxfile = self._write_tzx((
+            create_tzx_data_block([1, 2, 3]),
+            (0x1A, 0) # Unknown block ID
+        ))
+        exp_output = """
+            Version: 1.20
+            1: Standard speed data (0x10)
+              Pause: 0ms
+              Type: Data block
+              Length: 5
+              Data: 255, 1, 2, 3, 255
+        """
+        output, error = self.run_tapinfo(tzxfile, catch_exit=1)
+        self.assertEqual(error, 'ERROR: Unknown TZX block ID: 0x1A\n')
+        self.assertEqual(dedent(exp_output).lstrip(), output)
+
+    def test_tzx_with_parse_error(self):
+        tzxfile = self._write_tzx((
+            create_tzx_header_block('parseerror', start=10, data_type=0, pause=1000),
+            create_tzx_data_block([1, 4, 16], pause=500),
+            (0x10, 0, 0, 0)
+        ))
+        exp_output = """
+            Version: 1.20
+            1: Standard speed data (0x10)
+              Pause: 1000ms
+              Type: Header block
+              Program: parseerror
+              LINE: 10
+              Length: 19
+              Data: 0, 0, 112, 97, 114, 115, 101 ... 0, 0, 10, 0, 0, 0, 7
+            2: Standard speed data (0x10)
+              Pause: 500ms
+              Type: Data block
+              Length: 5
+              Data: 255, 1, 4, 16, 234
+        """
+        output, error = self.run_tapinfo(tzxfile, catch_exit=1)
+        self.assertEqual(error, 'ERROR: Block 3 (0x10) is too short\n')
+        self.assertEqual(dedent(exp_output).lstrip(), output)
 
     def test_tzx_block_0x11(self):
         data = [0, 1, 2]
@@ -759,10 +820,9 @@ class TapinfoTest(SkoolKitTestCase):
         length = len(archive_info)
         block.extend((length % 256, length // 256))
         block.extend(archive_info[:10])
-
-        with self.assertRaises(SkoolKitError) as cm:
-            self.run_tapinfo(self._write_tzx([block]))
-        self.assertEqual(cm.exception.args[0], 'Unexpected end of file')
+        output, error = self.run_tapinfo(self._write_tzx([block]), catch_exit=1)
+        self.assertEqual(output, 'Version: 1.20\n')
+        self.assertEqual(error, 'ERROR: Unexpected end of file\n')
 
     def test_tzx_block_0x33(self):
         block = [0x33] # Block ID
